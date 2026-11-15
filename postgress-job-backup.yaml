@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-postgres-backup
+spec:
+  schedule: "0/2 * * * *"
+  concurrencyPolicy: Forbid
+
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          # گام ۱: مشخص می‌کنیم این پاد حتماً روی «نود شماره ۱» اجرا شود
+          tolerations:
+            - operator: "Exists"
+              effect: "NoSchedule"
+            - operator: "Exists"
+              effect: "NoExecute"
+          containers:
+          - name: backup-container
+            image: postgres:15-alpine
+            command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              echo "=== Backup started at $(date) ==="
+              
+              # فایل بکاپ مستقیماً می‌رود داخل پوشه‌ای که به هاردِ سرور متصل است
+              BACKUP_FILE="/backup-on-node/db-backup-$(date +%F_%H-%M-%S).dump"
+              
+              pg_dump -h my-postgres-service -U postgres -d my_database -F c -b -v -f $BACKUP_FILE
+              
+              echo "=== Backup successfully saved to $BACKUP_FILE ==="
+
+            env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: password
+
+            # اتصال پوشه داخل کانتینر به ولوم
+            volumeMounts:
+            - name: local-node-storage
+              mountPath: /backup-on-node
+
+          restartPolicy: OnFailure
+
+          # گام ۲: تعریف ارتباط با پوشه واقعی روی هاردِ سرور
+          volumes:
+          - name: local-node-storage
+            hostPath:
+              path: /root/postgress   # این همان پوشه‌ای است که روی هاردِ «نود ۱» ساخته‌اید
+              type: DirectoryOrCreate      # اگر پوشه وجود نداشت، خودش بسازدش
