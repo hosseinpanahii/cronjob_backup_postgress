@@ -4,7 +4,7 @@ metadata:
   name: db-secret
 type: Opaque
 stringData:
-  password: "123456" # رمز عبور دیتابیس شما
+  password: "123456" 
 ---
 apiVersion: apps/v1
 kind: Deployment
